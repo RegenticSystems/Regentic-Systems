@@ -2,8 +2,8 @@
   "name": "regentic-systems",
   "version": "0.1.0",
   "scripts": {
-    "build": "echo done",
-    "start": "node server.js"
+    "build": "cd apps/web && npm install && npm run build",
+    "start": "cd apps/web && npm start"
   },
   "engines": {
     "node": "20"
