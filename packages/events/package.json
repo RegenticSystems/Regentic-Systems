@@ -1,0 +1,8 @@
+{
+  "name": "@synapse/events",
+  "version": "0.1.0",
+  "private": true,
+  "main": "./src/index.ts",
+  "dependencies": { "kafkajs": "^2.2.4" },
+  "devDependencies": { "@types/node": "^20.11.0", "typescript": "^5.4.0" }
+}

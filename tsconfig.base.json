@@ -1,0 +1,26 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ESNext",
+    "moduleResolution": "node",
+    "lib": ["ES2022","DOM"],
+    "allowJs": false,
+    "skipLibCheck": true,
+    "strict": true,
+    "noEmit": true,
+    "esModuleInterop": true,
+    "forceConsistentCasingInFileNames": true,
+    "resolveJsonModule": true,
+    "isolatedModules": true,
+    "incremental": true,
+    "plugins": [{ "name": "next" }],
+    "baseUrl": ".",
+    "paths": {
+      "@/*":        ["./*"],
+      "@shared/*":  ["packages/shared/src/*"],
+      "@ui/*":      ["packages/ui/src/*"],
+      "@events/*":  ["packages/events/src/*"],
+      "@config/*":  ["packages/config/src/*"]
+    }
+  }
+}
