@@ -2,8 +2,11 @@
   "name": "regentic-systems",
   "version": "0.1.0",
   "scripts": {
-    "build": "echo done",
+    "build": "npm install",
     "start": "node server.js"
+  },
+  "dependencies": {
+    "pg": "^8.11.0"
   },
   "engines": {
     "node": "20"
