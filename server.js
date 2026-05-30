@@ -2,7 +2,7 @@ const http = require('http');
 const { Client } = require('pg');
 const PORT = process.env.PORT || 3000;
 
-const db = new Client({ connectionString: process.env.DATABASE_URL, ssl: { rejectUnauthorized: false } });
+const db = new Client({ connectionString: process.env.DATABASE_URL, ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false });
 db.connect().then(() => console.log('Database connected')).catch(err => console.error('DB error:', err));
 
 async function initDB() {
