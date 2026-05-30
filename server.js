@@ -1,42 +1,13 @@
 const http = require('http');
-const { Pool } = require('pg');
 const PORT = process.env.PORT || 8080;
 
-const pool = new Pool({
-  connectionString: process.env.DATABASE_URL,
-  ssl: { rejectUnauthorized: false, checkServerIdentity: () => undefined }
-});
-
-async function initDB() {
-  try {
-    await pool.query(`
-      CREATE TABLE IF NOT EXISTS products (
-        id SERIAL PRIMARY KEY,
-        sku VARCHAR(100) UNIQUE NOT NULL,
-        name VARCHAR(255) NOT NULL,
-        description TEXT,
-        price DECIMAL(10,2) DEFAULT 0,
-        stock INT DEFAULT 0,
-        created_at TIMESTAMP DEFAULT NOW()
-      );
-      CREATE TABLE IF NOT EXISTS invoices (
-        id SERIAL PRIMARY KEY,
-        number VARCHAR(100) UNIQUE NOT NULL,
-        client_name VARCHAR(255),
-        amount DECIMAL(10,2) DEFAULT 0,
-        status VARCHAR(50) DEFAULT 'draft',
-        due_date DATE,
-        created_at TIMESTAMP DEFAULT NOW()
-      );
-    `);
-    console.log('Database ready');
-  } catch(e) {
-    console.error('DB init error:', e.message);
-  }
-}
-initDB();
-
+// In-memory storage
+let products = [];
+let invoices = [];
+let nextProductId = 1;
+let nextInvoiceId = 1;
 const sessions = {};
+
 function generateToken() { return Math.random().toString(36).substr(2) + Date.now().toString(36); }
 
 async function handleAPI(req, res) {
@@ -65,26 +36,18 @@ async function handleAPI(req, res) {
   }
 
   if (url === '/api/products' && method === 'GET') {
-    try {
-      const result = await pool.query('SELECT * FROM products ORDER BY created_at DESC');
-      res.writeHead(200, {'Content-Type': 'application/json'});
-      res.end(JSON.stringify(result.rows));
-    } catch(e) {
-      res.writeHead(500, {'Content-Type': 'application/json'});
-      res.end(JSON.stringify([]));
-    }
+    res.writeHead(200, {'Content-Type': 'application/json'});
+    res.end(JSON.stringify(products));
     return true;
   }
 
   if (url === '/api/products' && method === 'POST') {
     try {
       const { sku, name, description, price, stock } = JSON.parse(body);
-      const result = await pool.query(
-        'INSERT INTO products (sku, name, description, price, stock) VALUES ($1,$2,$3,$4,$5) RETURNING *',
-        [sku, name, description||'', price||0, stock||0]
-      );
+      const product = { id: nextProductId++, sku, name, description: description||'', price: parseFloat(price)||0, stock: parseInt(stock)||0, created_at: new Date() };
+      products.push(product);
       res.writeHead(200, {'Content-Type': 'application/json'});
-      res.end(JSON.stringify(result.rows[0]));
+      res.end(JSON.stringify(product));
     } catch(e) {
       res.writeHead(500, {'Content-Type': 'application/json'});
       res.end(JSON.stringify({ error: e.message }));
@@ -93,39 +56,26 @@ async function handleAPI(req, res) {
   }
 
   if (url.startsWith('/api/products/') && method === 'DELETE') {
-    try {
-      const id = url.split('/')[3];
-      await pool.query('DELETE FROM products WHERE id=$1', [id]);
-      res.writeHead(200, {'Content-Type': 'application/json'});
-      res.end(JSON.stringify({ success: true }));
-    } catch(e) {
-      res.writeHead(500, {'Content-Type': 'application/json'});
-      res.end(JSON.stringify({ error: e.message }));
-    }
+    const id = parseInt(url.split('/')[3]);
+    products = products.filter(p => p.id !== id);
+    res.writeHead(200, {'Content-Type': 'application/json'});
+    res.end(JSON.stringify({ success: true }));
     return true;
   }
 
   if (url === '/api/invoices' && method === 'GET') {
-    try {
-      const result = await pool.query('SELECT * FROM invoices ORDER BY created_at DESC');
-      res.writeHead(200, {'Content-Type': 'application/json'});
-      res.end(JSON.stringify(result.rows));
-    } catch(e) {
-      res.writeHead(500, {'Content-Type': 'application/json'});
-      res.end(JSON.stringify([]));
-    }
+    res.writeHead(200, {'Content-Type': 'application/json'});
+    res.end(JSON.stringify(invoices));
     return true;
   }
 
   if (url === '/api/invoices' && method === 'POST') {
     try {
       const { number, client_name, amount, status, due_date } = JSON.parse(body);
-      const result = await pool.query(
-        'INSERT INTO invoices (number, client_name, amount, status, due_date) VALUES ($1,$2,$3,$4,$5) RETURNING *',
-        [number, client_name, amount||0, status||'draft', due_date||null]
-      );
+      const invoice = { id: nextInvoiceId++, number, client_name, amount: parseFloat(amount)||0, status: status||'draft', due_date: due_date||null, created_at: new Date() };
+      invoices.push(invoice);
       res.writeHead(200, {'Content-Type': 'application/json'});
-      res.end(JSON.stringify(result.rows[0]));
+      res.end(JSON.stringify(invoice));
     } catch(e) {
       res.writeHead(500, {'Content-Type': 'application/json'});
       res.end(JSON.stringify({ error: e.message }));
@@ -134,33 +84,18 @@ async function handleAPI(req, res) {
   }
 
   if (url.startsWith('/api/invoices/') && method === 'DELETE') {
-    try {
-      const id = url.split('/')[3];
-      await pool.query('DELETE FROM invoices WHERE id=$1', [id]);
-      res.writeHead(200, {'Content-Type': 'application/json'});
-      res.end(JSON.stringify({ success: true }));
-    } catch(e) {
-      res.writeHead(500, {'Content-Type': 'application/json'});
-      res.end(JSON.stringify({ error: e.message }));
-    }
+    const id = parseInt(url.split('/')[3]);
+    invoices = invoices.filter(i => i.id !== id);
+    res.writeHead(200, {'Content-Type': 'application/json'});
+    res.end(JSON.stringify({ success: true }));
     return true;
   }
 
   if (url === '/api/stats' && method === 'GET') {
-    try {
-      const products = await pool.query('SELECT COUNT(*) as count FROM products');
-      const revenue = await pool.query("SELECT COALESCE(SUM(amount),0) as total FROM invoices WHERE status='paid'");
-      const open = await pool.query("SELECT COUNT(*) as count FROM invoices WHERE status != 'paid'");
-      res.writeHead(200, {'Content-Type': 'application/json'});
-      res.end(JSON.stringify({
-        products: products.rows[0].count,
-        revenue: revenue.rows[0].total,
-        openInvoices: open.rows[0].count
-      }));
-    } catch(e) {
-      res.writeHead(200, {'Content-Type': 'application/json'});
-      res.end(JSON.stringify({ products: 0, revenue: 0, openInvoices: 0 }));
-    }
+    const revenue = invoices.filter(i => i.status === 'paid').reduce((sum, i) => sum + i.amount, 0);
+    const openInvoices = invoices.filter(i => i.status !== 'paid').length;
+    res.writeHead(200, {'Content-Type': 'application/json'});
+    res.end(JSON.stringify({ products: products.length, revenue, openInvoices }));
     return true;
   }
 
@@ -269,6 +204,7 @@ body { font-family:'Segoe UI',sans-serif; background:#f0f2f5; display:flex; min-
 .modal-actions { display:flex; gap:10px; margin-top:20px; }
 .btn-cancel { padding:10px 20px; background:#f0f0f0; color:#666; border:none; border-radius:8px; cursor:pointer; font-weight:600; }
 .delete-btn { background:#ef444415; color:#ef4444; border:none; padding:4px 10px; border-radius:6px; cursor:pointer; font-size:12px; }
+.warning { background:#f59e0b15; border:1px solid #f59e0b30; color:#92400e; padding:10px 16px; border-radius:8px; font-size:12px; margin-bottom:20px; }
 </style>
 </head>
 <body>
@@ -299,6 +235,7 @@ body { font-family:'Segoe UI',sans-serif; background:#f0f2f5; display:flex; min-
   </div>
   <div class="content">
     <div id="page-dashboard" class="page active">
+      <div class="warning">&#x26A0; Data is stored in memory. It will reset if the server restarts. Database integration coming soon.</div>
       <div class="kpi-grid">
         <div class="kpi-card"><div class="kpi-label">Total Revenue</div><div class="kpi-value" id="stat-revenue">R0</div><div class="kpi-change">&#x2191; Paid invoices</div></div>
         <div class="kpi-card"><div class="kpi-label">Active Users</div><div class="kpi-value">1</div><div class="kpi-change">&#x2191; You!</div></div>
@@ -338,7 +275,7 @@ body { font-family:'Segoe UI',sans-serif; background:#f0f2f5; display:flex; min-
         <div class="card-title">&#x1F4E6; Inventory Management</div>
         <table class="table" id="products-table">
           <tr><th>SKU</th><th>Product</th><th>Stock</th><th>Price</th><th>Action</th></tr>
-          <tr><td colspan="5" style="text-align:center;color:#888;padding:30px;">Loading...</td></tr>
+          <tr><td colspan="5" style="text-align:center;color:#888;padding:30px;">No products yet.</td></tr>
         </table>
         <button class="btn" onclick="document.getElementById('add-product-modal').classList.add('show')">+ Add Product</button>
       </div>
@@ -351,7 +288,7 @@ body { font-family:'Segoe UI',sans-serif; background:#f0f2f5; display:flex; min-
         <div class="card-title">&#x1F4CB; Invoices</div>
         <table class="table" id="invoices-table">
           <tr><th>Invoice #</th><th>Client</th><th>Amount</th><th>Status</th><th>Action</th></tr>
-          <tr><td colspan="5" style="text-align:center;color:#888;padding:30px;">Loading...</td></tr>
+          <tr><td colspan="5" style="text-align:center;color:#888;padding:30px;">No invoices yet.</td></tr>
         </table>
         <button class="btn" onclick="document.getElementById('add-invoice-modal').classList.add('show')">+ Create Invoice</button>
       </div>
