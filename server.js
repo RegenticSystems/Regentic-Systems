@@ -2,9 +2,10 @@ const http = require('http');
 const { Pool } = require('pg');
 const PORT = process.env.PORT || 8080;
 
+const sslConfig = process.env.DATABASE_URL?.includes('localhost') ? false : { rejectUnauthorized: false };
 const pool = new Pool({
-  connectionString: process.env.DATABASE_URL + '?uselibpqcompat=true&sslmode=require',
-  ssl: { rejectUnauthorized: false }
+  connectionString: process.env.DATABASE_URL,
+  ssl: sslConfig
 });
 
 async function initDB() {
