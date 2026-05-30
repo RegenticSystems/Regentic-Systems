@@ -2,10 +2,9 @@ const http = require('http');
 const { Pool } = require('pg');
 const PORT = process.env.PORT || 8080;
 
-const isInternal = process.env.DATABASE_URL?.includes('railway.internal');
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
-  ssl: isInternal ? false : { rejectUnauthorized: false }
+  ssl: { rejectUnauthorized: false, checkServerIdentity: () => undefined }
 });
 
 async function initDB() {
